@@ -1,0 +1,93 @@
+name: LSTM Daily Training
+
+on:
+  schedule:
+    # Ejecutar diariamente a las 04:00 UTC (madrugada)
+    - cron: '0 4 * * *'
+  
+  # Permitir ejecución manual
+  workflow_dispatch:
+
+jobs:
+  train-lstm:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Instalar dependencias
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements_lstm.txt
+      
+      - name: Restaurar modelo anterior (si existe)
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            models/
+          key: lstm-model-${{ github.run_number }}
+          restore-keys: |
+            lstm-model-
+      
+      - name: Entrenar modelo LSTM
+        env:
+          KRAKEN_API_KEY: ${{ secrets.KRAKEN_API_KEY }}
+          KRAKEN_API_SECRET: ${{ secrets.KRAKEN_API_SECRET }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python train_lstm.py
+      
+      - name: Guardar modelo entrenado
+        uses: actions/cache/save@v4
+        if: success()
+        with:
+          path: |
+            models/
+          key: lstm-model-${{ github.run_number }}
+      
+      - name: Subir modelo como artifact
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: lstm-model-${{ github.run_number }}
+          path: |
+            models/lstm_volume_model.h5
+            models/volume_scaler.pkl
+            models/training_metrics.txt
+          retention-days: 7
+      
+      - name: Subir logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lstm-training-logs-${{ github.run_number }}
+          path: |
+            lstm_training.log
+          retention-days: 30
+      
+      - name: Notificar error
+        if: failure()
+        run: |
+          python -c "
+          import os
+          import requests
+          
+          token = os.getenv('TELEGRAM_BOT_TOKEN')
+          chat_id = os.getenv('TELEGRAM_CHAT_ID')
+          
+          if token and chat_id:
+              url = f'https://api.telegram.org/bot{token}/sendMessage'
+              message = '❌ LSTM TRAINING FAILED\n\nCheck GitHub Actions logs.'
+              requests.post(url, json={'chat_id': chat_id, 'text': message})
+          "
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
