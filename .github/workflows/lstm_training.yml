@@ -16,19 +16,47 @@ jobs:
       - name: Checkout código
         uses: actions/checkout@v4
       
+      - name: Verificar estructura de archivos
+        run: |
+          echo "=== Archivos en raíz ==="
+          ls -la
+          echo ""
+          echo "=== Buscando requirements ==="
+          find . -name "requirements*.txt" -type f
+      
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
       
       - name: Instalar dependencias
         run: |
           pip install --upgrade pip
-          pip install -r requirements_lstm.txt
+          
+          # Intentar con requirements_lstm.txt primero
+          if [ -f "requirements_lstm.txt" ]; then
+            echo "Instalando desde requirements_lstm.txt"
+            pip install -r requirements_lstm.txt
+          elif [ -f "requirements.txt" ]; then
+            echo "Instalando desde requirements.txt"
+            pip install -r requirements.txt
+          else
+            echo "No se encontró archivo de requirements, instalando manualmente"
+            pip install krakenex pykrakenapi pandas numpy ta requests tensorflow scikit-learn python-dateutil
+          fi
+          
+          # Verificar instalación
+          echo "=== Paquetes instalados ==="
+          pip list | grep -E "krakenex|pandas|tensorflow|requests"
+      
+      - name: Crear directorio models
+        run: |
+          mkdir -p models
+          echo "Directorio models creado"
       
       - name: Restaurar modelo anterior (si existe)
         uses: actions/cache/restore@v4
+        continue-on-error: true
         with:
           path: |
             models/
@@ -43,6 +71,10 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
+          echo "=== Verificando archivos Python ==="
+          ls -la *.py
+          echo ""
+          echo "=== Iniciando entrenamiento ==="
           python train_lstm.py
       
       - name: Guardar modelo entrenado
@@ -78,16 +110,54 @@ jobs:
         run: |
           python -c "
           import os
-          import requests
-          
-          token = os.getenv('TELEGRAM_BOT_TOKEN')
-          chat_id = os.getenv('TELEGRAM_CHAT_ID')
-          
-          if token and chat_id:
-              url = f'https://api.telegram.org/bot{token}/sendMessage'
-              message = '❌ LSTM TRAINING FAILED\n\nCheck GitHub Actions logs.'
-              requests.post(url, json={'chat_id': chat_id, 'text': message})
+          import sys
+          try:
+              import requests
+              token = os.getenv('TELEGRAM_BOT_TOKEN')
+              chat_id = os.getenv('TELEGRAM_CHAT_ID')
+              
+              if token and chat_id:
+                  url = f'https://api.telegram.org/bot{token}/sendMessage'
+                  message = '❌ LSTM TRAINING FAILED\n\nCheck GitHub Actions logs for details.'
+                  response = requests.post(url, json={'chat_id': chat_id, 'text': message})
+                  print(f'Notification sent: {response.status_code}')
+          except Exception as e:
+              print(f'Could not send notification: {e}')
+              sys.exit(0)  # No fallar el workflow por esto
           "
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+```
+
+Esta versión mejorada hace lo siguiente:
+
+- **Verifica la estructura de archivos** antes de intentar instalar dependencias
+- **Tiene un fallback** que instala las dependencias manualmente si no encuentra el archivo requirements
+- **Crea el directorio models** explícitamente antes de usarlo
+- **Continúa aunque falle** la restauración del cache (porque en la primera ejecución no existe)
+- **Muestra información de debug** útil en los logs
+
+## Cómo Aplicar los Cambios
+
+Una vez que hayas verificado la estructura y actualizado el archivo del workflow:
+
+**1.** Haz commit de todos los cambios a tu repositorio
+
+**2.** Ve a GitHub → Actions → LSTM Daily Training
+
+**3.** Click en "Run workflow" → "Run workflow"
+
+**4.** Esta vez deberías ver en los logs información útil como:
+```
+=== Archivos en raíz ===
+[listado de archivos]
+
+=== Buscando requirements ===
+./requirements_lstm.txt
+
+=== Paquetes instalados ===
+krakenex
+pandas
+tensorflow
+requests
