@@ -508,7 +508,7 @@ class LiveTrader:
             balance = self.kraken.get_tradable_balance()
             logger.info(f"Balance disponible: ${balance:.2f}")
             
-            if balance < 100:
+            if balance < 10:
                 logger.warning("Balance insuficiente para operar")
                 self.telegram.notify_error("Balance insuficiente")
                 return
