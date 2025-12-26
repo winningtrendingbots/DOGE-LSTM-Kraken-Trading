@@ -11,6 +11,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import ta
+import requests
 
 from kraken_trader import KrakenTrader
 from telegram_notifier import TelegramNotifier
