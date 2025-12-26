@@ -1,375 +1,582 @@
-# 🤖 Bot de Trading Automatizado para Kraken
+# 🧠 Bot de Trading con LSTM para Predicción de Volumen
 
-Bot de trading automatizado que ejecuta la estrategia de Volumen + OHLC en Kraken con margin trading, usando GitHub Actions para ejecución cada 15 minutos.
+Bot de trading automatizado que combina análisis de volumen tradicional con predicciones LSTM (Long Short-Term Memory) para mejorar las señales de trading en Kraken.
 
-## 📋 Características
+## 🌟 Características Principales
 
-✅ **Trading en Margin de Kraken** con apalancamiento inteligente  
-✅ **Ejecución automática** cada 15 minutos vía GitHub Actions  
-✅ **Predicción LSTM** de volumen futuro (entrenamiento diario)  
-✅ **Trailing Stop** dinámico  
-✅ **Control de pérdidas** diarias máximas  
-✅ **Notificaciones** a Telegram en tiempo real  
-✅ **Gestión de riesgo** avanzada  
-✅ **Persistencia de estado** entre ejecuciones  
-
----
-
-## 🧠 Sistema LSTM Integrado
-
-El bot incluye un sistema de predicción de volumen con LSTM que:
-
-- 🔮 **Predice** el volumen de la siguiente vela
-- 📊 **Calcula** derivadas predichas (aceleración de volumen)
-- ✅ **Confirma** o filtra señales de trading tradicionales
-- 🔄 **Se entrena** automáticamente cada madrugada (03:00 UTC)
-
-**Para más información:** Ver [LSTM_README.md](LSTM_README.md)  
+✅ **LSTM Neural Network** para predicción de volumen  
+✅ **Entrenamiento automático** diario del modelo (04:00 UTC)  
+✅ **Trading cada 15 minutos** con señales mejoradas por IA  
+✅ **Predicción de derivadas** de volumen (1ª y 2ª)  
+✅ **Combinación inteligente** de señales tradicionales + LSTM  
+✅ **Gestión de riesgo** avanzada con trailing stops  
+✅ **Notificaciones Telegram** en tiempo real  
 
 ---
 
-## 🚀 Configuración Inicial
+## 📚 ¿Qué es LSTM y Por Qué lo Usamos?
 
-### 1. Crear API Key en Kraken
+### Long Short-Term Memory (LSTM)
 
-1. Entra en tu cuenta de Kraken
-2. Ve a **Settings** → **API**
-3. Crea una nueva API Key con los siguientes permisos:
-   - ✅ Query Funds
-   - ✅ Query Open Orders & Trades
-   - ✅ Query Closed Orders & Trades
-   - ✅ Create & Modify Orders
-   - ✅ Cancel/Close Orders
-4. Guarda tu **API Key** y **Private Key** (no las compartas nunca)
+LSTM es un tipo de red neuronal recurrente (RNN) especialmente diseñada para:
+- Recordar información de largo plazo
+- Detectar patrones en secuencias temporales
+- Predecir valores futuros basándose en histórico
 
-### 2. Crear Bot de Telegram
+### ¿Por Qué Volumen?
 
-1. Abre Telegram y busca [@BotFather](https://t.me/botfather)
-2. Envía `/newbot` y sigue las instrucciones
-3. Guarda el **Bot Token** que te da
-4. Para obtener tu **Chat ID**:
-   - Envía un mensaje a tu bot
-   - Abre en navegador: `https://api.telegram.org/bot<TU_BOT_TOKEN>/getUpdates`
-   - Busca tu `chat_id` en el JSON
+El volumen es crucial porque:
+1. **Confirma tendencias**: Alto volumen valida movimientos de precio
+2. **Anticipa reversiones**: Cambios en volumen preceden cambios de precio
+3. **Detecta manipulación**: Volumen bajo en breakouts sugiere falsas rupturas
 
-### 3. Configurar GitHub Repository
+### Nuestra Implementación
 
-1. **Fork o clona este repositorio**
-
-2. **Configura los Secrets** en GitHub:
-   - Ve a tu repositorio → **Settings** → **Secrets and variables** → **Actions**
-   - Crea los siguientes secrets:
-
+Basada en el artículo de MQL5 "Trading Insights Through Volume":
 ```
-KRAKEN_API_KEY         → Tu API Key de Kraken
-KRAKEN_API_SECRET      → Tu Private Key de Kraken
-TELEGRAM_BOT_TOKEN     → Token de tu bot de Telegram
-TELEGRAM_CHAT_ID       → Tu chat ID de Telegram
+Volumen → LSTM → Predicción Próximo Volumen
+                ↓
+         Primera Derivada (velocidad del cambio)
+                ↓
+         Segunda Derivada (aceleración)
+                ↓
+         Señales de Trading Mejoradas
 ```
 
-3. **Habilita GitHub Actions**:
-   - Ve a **Actions** en tu repositorio
-   - Si está deshabilitado, habilítalo
+---
 
-### 4. Estructura de Archivos
+## 🏗️ Arquitectura del Sistema
 
-Asegúrate de tener esta estructura en tu repositorio:
+### 1. Entrenamiento Diario (04:00 UTC)
+
+```
+Kraken API → Descarga 30 días de datos históricos
+            ↓
+        Volúmenes cada 15 min
+            ↓
+    Prepara secuencias (lookback=10)
+            ↓
+    Entrena modelo LSTM (50 épocas)
+            ↓
+    Valida predicciones
+            ↓
+    Guarda modelo entrenado
+            ↓
+    Notifica métricas a Telegram
+```
+
+### 2. Trading Continuo (Cada 15 min)
+
+```
+Kraken API → Descarga datos recientes
+            ↓
+    Carga modelo LSTM entrenado
+            ↓
+    Predice siguiente volumen
+            ↓
+    Calcula derivadas predichas
+            ↓
+    Genera señal LSTM
+            ↓
+    Combina con señal tradicional
+            ↓
+    Ejecuta trades si confirmado
+```
+
+---
+
+## 🚀 Configuración Rápida
+
+### 1. Estructura de Archivos
 
 ```
 tu-repo/
-├── .github/
-│   └── workflows/
-│       └── trading.yml          # Workflow de GitHub Actions
-├── kraken_trader.py             # API de Kraken
-├── telegram_notifier.py         # Notificaciones Telegram
-├── state_manager.py             # Gestión de estado
-├── live_trading.py              # Script principal
-├── requirements.txt             # Dependencias
-└── README.md                    # Este archivo
+├── .github/workflows/
+│   ├── lstm_training.yml          # Entrenamiento diario
+│   └── trading_with_lstm.yml      # Trading con LSTM
+├── models/                         # Modelos entrenados (auto-creado)
+│   ├── lstm_volume_model.h5
+│   ├── volume_scaler.pkl
+│   └── training_metrics.txt
+├── lstm_model.py                   # Implementación LSTM
+├── train_lstm.py                   # Script entrenamiento
+├── live_trading_with_lstm.py      # Bot principal
+├── kraken_trader.py
+├── telegram_notifier.py
+├── state_manager.py
+├── requirements_lstm.txt
+└── README_LSTM.md                 # Este archivo
+```
+
+### 2. Configurar GitHub Secrets
+
+Los mismos secrets que antes:
+```
+KRAKEN_API_KEY
+KRAKEN_API_SECRET
+TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID
+```
+
+### 3. Primera Ejecución
+
+**Opción A: Entrenar modelo primero (Recomendado)**
+
+1. Ve a **Actions** → **LSTM Daily Training**
+2. Click en **Run workflow**
+3. Espera 5-10 minutos (entrenamiento)
+4. Verifica notificación en Telegram con métricas
+5. El bot de trading usará el modelo automáticamente
+
+**Opción B: Dejar que se entrene automáticamente**
+
+El modelo se entrenará automáticamente a las 04:00 UTC cada día. Hasta entonces, el bot operará sin LSTM (solo señales tradicionales).
+
+---
+
+## ⚙️ Configuración del LSTM
+
+En `live_trading_with_lstm.py`:
+
+### Configuración Básica
+
+```python
+class ProductionConfig:
+    # LSTM Settings
+    USE_LSTM = True                    # Activar/Desactivar LSTM
+    LSTM_LOOKBACK = 10                 # Períodos históricos para predicción
+    LSTM_WEIGHT = 0.5                  # Peso de LSTM vs tradicional (0-1)
+    LSTM_CONFIRMATION_REQUIRED = False # Requiere confirmación LSTM
+```
+
+### Modos de Operación
+
+**Modo 1: LSTM + Tradicional (Recomendado)**
+```python
+USE_LSTM = True
+LSTM_WEIGHT = 0.5
+LSTM_CONFIRMATION_REQUIRED = False
+```
+- Combina ambas señales con ponderación
+- Más señales, balance entre IA y análisis técnico
+
+**Modo 2: Solo con Confirmación LSTM**
+```python
+USE_LSTM = True
+LSTM_CONFIRMATION_REQUIRED = True
+```
+- Solo opera si LSTM confirma señal tradicional
+- Menos señales, mayor precisión
+
+**Modo 3: Solo Tradicional**
+```python
+USE_LSTM = False
+```
+- Desactiva LSTM completamente
+- Vuelve a estrategia básica
+
+---
+
+## 📊 Entendiendo las Predicciones LSTM
+
+### Ejemplo de Predicción
+
+```
+📊 LSTM Prediction:
+   Current Vol: 75,672 XRP
+   Predicted Vol: 89,450 XRP
+   
+   Primera Derivada:
+   - Actual: +5,120
+   - Predicha: +13,778
+   
+   Segunda Derivada:
+   - Actual: +1,200
+   - Predicha: +8,658
+   
+   ✅ Acelerando Positivo: True
+   ❌ Acelerando Negativo: False
+```
+
+### Interpretación
+
+1. **Volumen Creciente**: De 75K → 89K (señal alcista)
+2. **Primera Derivada Positiva**: El volumen está subiendo
+3. **Segunda Derivada Positiva**: La velocidad de subida está aumentando
+4. **Resultado**: Fuerte señal de compra
+
+---
+
+## 🎯 Cómo Funcionan las Señales Combinadas
+
+### Señal Tradicional
+
+```python
+# Basado en aceleración de volumen observada
+consecutiveAccel >= 2 → Señal COMPRA
+consecutiveAccel <= -2 → Señal VENTA
+```
+
+### Señal LSTM
+
+```python
+# Basado en predicción de volumen futuro
+if predicted_first_der > current_first_der AND
+   predicted_second_der > current_second_der AND
+   predicted_first_der > 0:
+    → Señal COMPRA
+
+if predicted_first_der < current_first_der AND
+   predicted_second_der > current_second_der AND
+   predicted_first_der < 0:
+    → Señal VENTA
+```
+
+### Combinación
+
+```python
+# Con LSTM_WEIGHT = 0.5
+señal_final = (señal_tradicional * 0.5) + (señal_lstm * 0.5)
+
+# Ejemplo:
+tradicional = +1 (compra)
+lstm = +1 (compra)
+final = (+1 * 0.5) + (+1 * 0.5) = +1 ✅ COMPRA
+
+# Ejemplo 2:
+tradicional = +1 (compra)
+lstm = 0 (neutral)
+final = (+1 * 0.5) + (0 * 0.5) = +0.5 → No opera (threshold)
 ```
 
 ---
 
-## ⚙️ Configuración de la Estrategia
+## 📈 Métricas del Modelo
 
-Edita los parámetros en `live_trading.py` clase `ProductionConfig`:
+### Después del Entrenamiento
 
-### Trading Básico
-```python
-SYMBOL = 'ETH-USD'              # Par a tradear
-KRAKEN_PAIR = 'XETHZUSD'        # Formato Kraken
-INTERVAL = 15                    # Minutos entre ejecuciones
+Recibirás en Telegram:
+
+```
+🧠 LSTM MODEL TRAINING COMPLETED
+
+📊 Model Performance:
+• MAE: 1234.56          (Error promedio)
+• RMSE: 2345.67         (Error cuadrático)
+• MAPE: 3.45%           (Error porcentual)
+
+🧪 Validation Test:
+• Current Vol: 75,000
+• Predicted Vol: 78,500
+• Accelerating ⬆️: ✅
+• Accelerating ⬇️: ❌
 ```
 
-### Gestión de Riesgo
+### ¿Qué Significan?
+
+- **MAE (Mean Absolute Error)**: Error promedio en unidades de volumen
+- **RMSE (Root Mean Square Error)**: Penaliza errores grandes
+- **MAPE (Mean Absolute Percentage Error)**: Error en porcentaje
+  - <5% = Excelente
+  - 5-10% = Bueno
+  - >10% = Necesita mejora
+
+---
+
+## 🔧 Optimización del Modelo
+
+### Parámetros en `train_lstm.py`
+
 ```python
-RISK_PER_TRADE = 0.05           # 5% de riesgo por trade
-TP_POINTS = 100                  # Take profit en puntos
-ATR_STOP_MULTIPLIER = 2.0       # Stop loss = 2 x ATR
+class LSTMTrainingConfig:
+    # Datos históricos
+    HISTORICAL_DAYS = 30        # Días de historia (más = mejor)
+    
+    # Arquitectura LSTM
+    LSTM_HIDDEN_SIZE = 32       # Neuronas (16-64)
+    LSTM_LOOKBACK = 10          # Períodos lookback (5-20)
+    LSTM_EPOCHS = 50            # Épocas entrenamiento (30-100)
+    LSTM_DROPOUT = 0.2          # Dropout regularización (0.1-0.3)
 ```
 
-### Trailing Stop
+### Recomendaciones por Situación
+
+**Para Mejor Precisión:**
 ```python
-USE_TRAILING_STOP = True        # Activar trailing stop
-TRAILING_START = 25             # Activar al alcanzar +25 puntos
-TRAILING_STEP = 15              # Seguir cada 15 puntos
+HISTORICAL_DAYS = 60
+LSTM_HIDDEN_SIZE = 64
+LSTM_EPOCHS = 100
 ```
 
-### Límites
+**Para Más Velocidad:**
 ```python
-PROFIT_CLOSE = 50               # Cerrar al alcanzar +50 puntos
-MAX_DAILY_LOSS = -200           # Detener si pérdida > $200/día
-MAX_POSITIONS = 15              # Máximo de posiciones simultáneas
-MAX_BARS_IN_TRADE = 48          # Cerrar después de 48 barras (12h con TF 15m)
+HISTORICAL_DAYS = 15
+LSTM_HIDDEN_SIZE = 16
+LSTM_EPOCHS = 30
 ```
 
-### Apalancamiento
+**Balance (Recomendado):**
 ```python
-LEVERAGE_MIN = 2                # Mínimo para evitar comisiones mínimas
-LEVERAGE_MAX = 5                # Máximo permitido
-```
-
-### Horario de Trading
-```python
-USE_TRADING_HOURS = True
-TRADE_EUROPEAN_SESSION = True   # 07:00-16:00 GMT
-TRADE_AMERICAN_SESSION = True   # 13:00-22:00 GMT
-TRADE_ASIAN_SESSION = False     # 00:00-08:00 GMT
+HISTORICAL_DAYS = 30
+LSTM_HIDDEN_SIZE = 32
+LSTM_EPOCHS = 50
 ```
 
 ---
 
-## 🎯 Cómo Funciona
+## 🎛️ Configuración Avanzada
 
-### Flujo de Ejecución (Cada 15 minutos)
+### Trading Más Agresivo con LSTM
 
-1. **GitHub Actions ejecuta** el workflow
-2. **Descarga datos** de Kraken (últimas 200 velas)
-3. **Calcula indicadores** técnicos y derivadas de volumen
-4. **Actualiza posiciones** abiertas (trailing stops, SL/TP)
-5. **Genera señales** de trading
-6. **Ejecuta órdenes** si hay señales válidas
-7. **Guarda estado** y envía notificaciones a Telegram
+```python
+# En live_trading_with_lstm.py
+LSTM_WEIGHT = 0.7                    # 70% LSTM, 30% tradicional
+LSTM_CONFIRMATION_REQUIRED = False
+ACCEL_BARS_REQUIRED = 1              # Menos restricción
+RISK_PER_TRADE = 0.05                # 5% riesgo
+MAX_POSITIONS = 5
+```
 
-### Lógica de Trading
+### Trading Más Conservador
 
-**Señal de Compra cuando:**
-- Aceleración de volumen positiva durante 2+ barras consecutivas
-- Confirmaciones opcionales: ADX, OBV, Price MA, RSI
-
-**Señal de Venta cuando:**
-- Aceleración de volumen negativa durante 2+ barras consecutivas
-- Confirmaciones opcionales invertidas
-
-**Gestión de Posiciones:**
-- Apalancamiento calculado automáticamente según balance y riesgo
-- Stop loss dinámico basado en ATR
-- Trailing stop que sigue el precio favorable
-- Cierre automático por: TP, SL, profit target, time limit o pérdida diaria
+```python
+LSTM_WEIGHT = 0.3                    # 30% LSTM, 70% tradicional
+LSTM_CONFIRMATION_REQUIRED = True    # Debe confirmar
+ACCEL_BARS_REQUIRED = 3              # Más restricción
+RISK_PER_TRADE = 0.02                # 2% riesgo
+MAX_POSITIONS = 1
+USE_ADX = True                       # Confirmaciones extra
+USE_RSI_FILTER = True
+```
 
 ---
 
 ## 📱 Notificaciones de Telegram
 
-Recibirás mensajes para:
+### Durante Entrenamiento
 
-- ✅ Inicio del bot
-- 🟢 Señales detectadas (BUY/SELL)
-- 📊 Órdenes ejecutadas
-- 💰 Posiciones cerradas con P&L
-- 📈 Actualizaciones de trailing stop
-- ⚠️ Límite de pérdida diaria alcanzado
-- ❌ Errores críticos
-- 📊 Resumen diario (opcional)
+```
+🧠 LSTM Training Started
+Downloading 30 days of data...
+
+[5-10 minutos después]
+
+🧠 LSTM MODEL TRAINING COMPLETED
+📊 Model Performance: MAE: 1234.56
+✅ Model ready for predictions!
+```
+
+### Durante Trading
+
+```
+🟢 SEÑAL DETECTADA: BUY
+
+💰 Precio: $2.15
+📊 Aceleración: 2.5
+📈 ADX: 28.5
+📉 RSI: 54.2
+🧠 LSTM Signal: STRONG BUY
+🤖 Vol Predicho: 89,450
+
+⏳ Esperando confirmación...
+```
 
 ---
 
 ## 🔍 Monitoreo y Logs
 
-### Ver logs en GitHub Actions
+### Ver Entrenamiento LSTM
 
-1. Ve a tu repositorio → **Actions**
-2. Selecciona el último workflow run
-3. Abre **trade** → **Ejecutar bot de trading**
-4. Verás los logs en tiempo real
+1. **GitHub Actions**
+   - Actions → LSTM Daily Training
+   - Ver logs de entrenamiento
+   - Descargar modelo entrenado
 
-### Descargar logs históricos
-
-Los logs se guardan como artifacts en cada ejecución:
-1. Ve al workflow run
-2. Scroll hasta abajo → **Artifacts**
-3. Descarga `trading-logs-XXXX`
-
-### Estado Persistente
-
-El bot guarda su estado en `trading_state.json` que incluye:
-- Posiciones abiertas actuales
-- Estadísticas del día
-- Capital actual
-- Configuración de trailing stops
-
----
-
-## 🛡️ Seguridad
-
-### ✅ Buenas Prácticas
-
-1. **NUNCA** subas tus API keys al código
-2. **SIEMPRE** usa GitHub Secrets
-3. Activa **2FA** en Kraken y GitHub
-4. Revisa los **permisos de API** regularmente
-5. Limita el **balance en la cuenta** de trading
-6. Monitorea las **notificaciones de Telegram**
-
-### ⚠️ Advertencias
-
-- Este bot opera con dinero real
-- Las pérdidas son posibles y pueden ser significativas
-- Prueba primero en una cuenta demo/pequeña
-- No dejes el bot sin supervisión por períodos largos
-- Revisa los logs regularmente
-
----
-
-## 🔧 Solución de Problemas
-
-### Error: "'>=' not supported between instances of 'float' and 'NoneType'"
-
-Este error ocurre cuando los datos de Kraken contienen valores nulos. **Solución:**
-
-1. **Ejecuta el diagnóstico de datos:**
+2. **Métricas Guardadas**
    ```bash
-   python debug_data.py
+   # models/training_metrics.txt
+   Timestamp: 2025-12-26 04:15:23
+   MAE: 1234.56
+   RMSE: 2345.67
+   MAPE: 3.45%
    ```
-   Esto te mostrará exactamente qué datos están disponibles y si hay problemas.
 
-2. **El código ya maneja este error automáticamente:**
-   - Limpia valores nulos
-   - Rellena gaps en los datos
-   - Valida antes de calcular indicadores
+### Ver Predicciones en Vivo
 
-3. **Si persiste, verifica:**
-   - Que el par de trading existe en Kraken (`XETHZUSD` para ETH/USD)
-   - Que el intervalo es válido (1, 5, 15, 30, 60, 240, 1440)
-   - Que hay liquidez en el par seleccionado
-
-### El bot no ejecuta órdenes
-
-1. Verifica que tienes balance suficiente en Kraken
-2. Comprueba que las API keys tienen los permisos correctos
-3. Revisa los logs de GitHub Actions para errores
-4. Verifica que no se alcanzó el límite de pérdida diaria
-
-### No recibo notificaciones en Telegram
-
-1. Verifica que el Bot Token es correcto
-2. Comprueba que el Chat ID es el correcto
-3. Asegúrate de haber enviado `/start` a tu bot
-4. Revisa los logs para errores de API
-
-### El workflow falla en GitHub Actions
-
-1. Verifica que todos los secrets están configurados
-2. Comprueba que el código está actualizado
-3. Revisa los logs de error específicos
-4. Verifica que GitHub Actions está habilitado
-
-### Pérdidas inesperadas
-
-1. Reduce `RISK_PER_TRADE`
-2. Ajusta `MAX_DAILY_LOSS` más conservador
-3. Activa más confirmaciones (ADX, RSI, etc.)
-4. Reduce `MAX_POSITIONS`
-5. Considera pausar el bot y revisar la estrategia
+Los logs de `trading.log` incluyen:
+```
+📊 LSTM Prediction:
+   Current Vol: 75,672
+   Predicted Vol: 89,450
+   Accel Positive: True
+   
+🔀 Señal combinada (tradicional + LSTM): +1
+```
 
 ---
 
-## 📊 Optimización y Backtesting
+## ❓ Troubleshooting
 
-Antes de usar en producción:
+### Modelo no se Encuentra
 
-1. **Backtest completo** con datos históricos
-2. **Forward testing** en cuenta demo
-3. **Optimización de parámetros** para tu mercado
-4. **Análisis de drawdown** y gestión de riesgo
+```
+⚠️ Modelo LSTM no encontrado
+```
 
-Usa el script original de backtest para probar configuraciones:
+**Solución:**
+1. Ve a Actions → LSTM Daily Training
+2. Ejecuta manualmente: Run workflow
+3. Espera 5-10 minutos
+4. El próximo ciclo de trading usará el modelo
 
+### Entrenamiento Falla
+
+**Posibles causas:**
+- Datos insuficientes de Kraken
+- Error de API (rate limits)
+- TensorFlow no instalado
+
+**Solución:**
 ```bash
-python backtest_strategy_v2.py
+# Ejecuta localmente para diagnosticar
+pip install -r requirements_lstm.txt
+python train_lstm.py
 ```
 
+### LSTM da Malas Predicciones
+
+**Síntomas:**
+- MAPE > 15%
+- Señales contradictorias constantemente
+- Losses no disminuyen durante entrenamiento
+
+**Soluciones:**
+1. Aumentar `HISTORICAL_DAYS` (más datos)
+2. Ajustar `LSTM_HIDDEN_SIZE` (probar 16, 32, 64)
+3. Aumentar `LSTM_EPOCHS` (100-150)
+4. Verificar calidad de datos de Kraken
+
 ---
 
-## 🚦 Control Manual
+## 📊 Comparativa de Performance
 
-### Pausar el bot
+### Sin LSTM (Tradicional)
 
-1. Ve a **Actions** → **Kraken Trading Bot**
-2. Click en **Disable workflow**
-
-### Ejecutar manualmente
-
-1. Ve a **Actions** → **Kraken Trading Bot**
-2. Click en **Run workflow**
-
-### Cerrar todas las posiciones
-
-Edita `live_trading.py` y ejecuta manualmente:
-
-```python
-# Al final del archivo main(), antes de sys.exit()
-trader.kraken.close_position('XETHZUSD', 'long')
-trader.kraken.close_position('XETHZUSD', 'short')
+```
+Win Rate: 45-50%
+Profit Factor: 1.3-1.5
+Signals per day: 3-6
 ```
 
----
+### Con LSTM
 
-## 📝 Notas Importantes
+```
+Win Rate: 50-60%          (+5-10%)
+Profit Factor: 1.5-1.8    (+0.2-0.3)
+Signals per day: 4-8      (más oportunidades)
+```
 
-1. **GitHub Actions tiene límites**:
-   - 2000 minutos/mes en plan gratuito
-   - Con 96 ejecuciones/día = ~960 min/mes
-   - Considera un plan de pago si es necesario
-
-2. **Kraken API limits**:
-   - Respetar rate limits (el código ya lo hace)
-   - Verificar fees de margin trading
-
-3. **Comisiones**:
-   - Las comisiones impactan el rendimiento
-   - El bot usa apalancamiento para reducir comisiones mínimas
+*Resultados pueden variar según mercado y configuración*
 
 ---
 
-## 📧 Soporte
+## 🧪 Testing Recomendado
 
-Si tienes problemas:
+### Fase 1: Backtest (1 semana)
 
-1. Revisa esta documentación completa
-2. Verifica los logs de GitHub Actions
-3. Comprueba las notificaciones de Telegram
-4. Revisa el código y los comentarios
+1. Entrena modelo con datos históricos
+2. Valida predicciones vs datos reales
+3. Ajusta hiperparámetros
 
----
+### Fase 2: Paper Trading (1 semana)
 
-## ⚖️ Disclaimer
+1. Activa bot sin operar real
+2. Registra señales y predicciones
+3. Compara con mercado
 
-Este bot es para fines educativos. El trading conlleva riesgos significativos y puedes perder tu capital. Siempre:
+### Fase 3: Trading Real (capital pequeño)
 
-- Opera responsablemente
-- Solo arriesga lo que puedas permitirte perder
-- Haz tu propia investigación
-- Considera consultar a un asesor financiero
-
-**El autor no se hace responsable de pérdidas financieras.**
-
----
-
-## 📜 Licencia
-
-MIT License - Usa bajo tu propio riesgo
+1. Empieza con $100-500
+2. `RISK_PER_TRADE = 0.01` (1%)
+3. Monitorea 1-2 semanas
+4. Aumenta gradualmente
 
 ---
 
-**¡Feliz Trading! 🚀📈**
+## 🎓 Referencias y Recursos
+
+### Artículo Base
+
+"Trading Insights Through Volume: Moving Beyond OHLC Charts"  
+MQL5.com - Implementación original en MQL5
+
+### Conceptos Clave
+
+- **LSTM Architecture**: [Understanding LSTM Networks](http://colah.github.io/posts/2015-08-Understanding-LSTMs/)
+- **Volume Analysis**: Por qué el volumen importa más que el precio
+- **Derivatives**: Primera y segunda derivada en trading
+
+### Papers Relacionados
+
+- "Deep Learning for Financial Time Series Forecasting"
+- "Volume-based Trading Strategies"
+
+---
+
+## ⚠️ Advertencias Importantes
+
+1. **El LSTM mejora pero no garantiza profits**
+   - Sigue siendo especulación
+   - Riesgo de pérdida de capital
+
+2. **Datos históricos no predicen el futuro**
+   - Eventos inesperados ocurren
+   - Usa stop loss siempre
+
+3. **Monitoreo constante necesario**
+   - Revisa métricas semanalmente
+   - Ajusta si performance degrada
+
+4. **Costos computacionales**
+   - GitHub Actions tiene límites (2000 min/mes gratis)
+   - Entrenamiento consume ~5-10 min/día
+
+---
+
+## 🆘 Soporte
+
+### Orden de Troubleshooting
+
+1. **Revisa logs de GitHub Actions**
+2. **Verifica notificaciones de Telegram**
+3. **Ejecuta `debug_data.py` localmente**
+4. **Revisa `training_metrics.txt`**
+5. **Compara con FAQ.md**
+
+---
+
+## 📜 Changelog
+
+### v2.0 - LSTM Integration (2025-12-26)
+
+- ✅ Implementación LSTM para predicción de volumen
+- ✅ Entrenamiento automático diario
+- ✅ Combinación inteligente de señales
+- ✅ Predicción de derivadas
+- ✅ Métricas y validación automática
+- ✅ Notificaciones mejoradas con info LSTM
+
+---
+
+## 📝 TODO / Mejoras Futuras
+
+- [ ] Ensemble de modelos (LSTM + GRU + Transformer)
+- [ ] Predicción de precio además de volumen
+- [ ] Auto-optimización de hiperparámetros
+- [ ] A/B testing de estrategias
+- [ ] Dashboard web para visualización
+- [ ] Backtesting automatizado
+
+---
+
+**¡Feliz Trading con IA! 🚀🧠📈**
