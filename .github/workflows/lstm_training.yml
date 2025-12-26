@@ -128,28 +128,28 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-```
-
-Esta versión mejorada hace lo siguiente:
-
-- **Verifica la estructura de archivos** antes de intentar instalar dependencias
-- **Tiene un fallback** que instala las dependencias manualmente si no encuentra el archivo requirements
-- **Crea el directorio models** explícitamente antes de usarlo
-- **Continúa aunque falle** la restauración del cache (porque en la primera ejecución no existe)
-- **Muestra información de debug** útil en los logs
-
-## Cómo Aplicar los Cambios
-
-Una vez que hayas verificado la estructura y actualizado el archivo del workflow:
-
-**1.** Haz commit de todos los cambios a tu repositorio
-
-**2.** Ve a GitHub → Actions → LSTM Daily Training
-
-**3.** Click en "Run workflow" → "Run workflow"
-
-**4.** Esta vez deberías ver en los logs información útil como:
-```
+            ```
+            
+            Esta versión mejorada hace lo siguiente:
+            
+            - **Verifica la estructura de archivos** antes de intentar instalar dependencias
+            - **Tiene un fallback** que instala las dependencias manualmente si no encuentra el archivo requirements
+            - **Crea el directorio models** explícitamente antes de usarlo
+            - **Continúa aunque falle** la restauración del cache (porque en la primera ejecución no existe)
+            - **Muestra información de debug** útil en los logs
+            
+            ## Cómo Aplicar los Cambios
+            
+            Una vez que hayas verificado la estructura y actualizado el archivo del workflow:
+            
+            **1.** Haz commit de todos los cambios a tu repositorio
+            
+            **2.** Ve a GitHub → Actions → LSTM Daily Training
+            
+            **3.** Click en "Run workflow" → "Run workflow"
+            
+            **4.** Esta vez deberías ver en los logs información útil como:
+            ```
 === Archivos en raíz ===
 [listado de archivos]
 
