@@ -45,9 +45,9 @@ class ProductionConfig:
     TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
     
     # Trading
-    SYMBOL = 'XRP-USD'
-    KRAKEN_PAIR = 'XXRPZUSD'
-    INTERVAL = 15
+    SYMBOL = 'DOGE-USD'
+    KRAKEN_PAIR = 'XDOGEZUSD'
+    INTERVAL = 60
     LOOKBACK_PERIODS = 200
     
     # ===== CONFIGURACIÓN LSTM =====
@@ -59,7 +59,7 @@ class ProductionConfig:
     SCALER_PATH = 'models/volume_scaler.pkl'
     
     # Estrategia (igual que antes)
-    VOLUME_SMOOTH_PERIODS = 3
+    VOLUME_SMOOTH_PERIODS = 4
     ACCEL_BARS_REQUIRED = 2
     
     # Confirmaciones
@@ -72,28 +72,28 @@ class ProductionConfig:
     MIN_CONFIRMATIONS_RATIO = 0.25
     
     # Risk Management
-    RISK_PER_TRADE = 0.03
-    TP_POINTS = 40
-    ATR_STOP_MULTIPLIER = 2.0
+    RISK_PER_TRADE = 0.05
+    TP_POINTS = 100
+    ATR_STOP_MULTIPLIER = 1.0
     
     # Trailing Stop
     USE_TRAILING_STOP = True
-    TRAILING_START = 15
-    TRAILING_STEP = 10
+    TRAILING_START = 25
+    TRAILING_STEP = 15
     
     # Limits
-    PROFIT_CLOSE = 30
-    MAX_DAILY_LOSS = -100
-    MAX_POSITIONS = 3
+    PROFIT_CLOSE = 50
+    MAX_DAILY_LOSS = -20
+    MAX_POSITIONS = 1
     SAME_DIRECTION_ONLY = False
-    MAX_BARS_IN_TRADE = 48
+    MAX_BARS_IN_TRADE = 2
     
     # Leverage
     LEVERAGE_MIN = 2
-    LEVERAGE_MAX = 3
+    LEVERAGE_MAX = 10
     
     # Trading Hours
-    USE_TRADING_HOURS = True
+    USE_TRADING_HOURS = False
     TRADE_EUROPEAN_SESSION = True
     TRADE_AMERICAN_SESSION = True
     TRADE_ASIAN_SESSION = True
