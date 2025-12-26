@@ -1,0 +1,104 @@
+name: Kraken Trading Bot with LSTM
+
+on:
+  schedule:
+    # Ejecutar cada 15 minutos
+    - cron: '*/15 * * * *'
+  
+  # Permitir ejecución manual
+  workflow_dispatch:
+
+jobs:
+  trade:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Instalar dependencias
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements_lstm.txt
+      
+      - name: Restaurar estado previo
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            trading_state.json
+            trading.log
+          key: trading-state-${{ github.run_number }}
+          restore-keys: |
+            trading-state-
+      
+      - name: Restaurar modelo LSTM
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            models/
+          key: lstm-model-
+          restore-keys: |
+            lstm-model-
+      
+      - name: Verificar modelo LSTM
+        run: |
+          if [ ! -f "models/lstm_volume_model.h5" ]; then
+            echo "⚠️ Modelo LSTM no encontrado"
+            echo "Ejecutando sin LSTM hasta que se entrene el modelo..."
+          else
+            echo "✅ Modelo LSTM encontrado"
+            ls -lh models/
+          fi
+      
+      - name: Ejecutar bot de trading con LSTM
+        env:
+          KRAKEN_API_KEY: ${{ secrets.KRAKEN_API_KEY }}
+          KRAKEN_API_SECRET: ${{ secrets.KRAKEN_API_SECRET }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python live_trading_with_lstm.py
+      
+      - name: Guardar estado
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: |
+            trading_state.json
+            trading.log
+          key: trading-state-${{ github.run_number }}
+      
+      - name: Subir logs como artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trading-logs-${{ github.run_number }}
+          path: |
+            trading.log
+            trading_state.json
+          retention-days: 30
+      
+      - name: Notificar error
+        if: failure()
+        run: |
+          python -c "
+          import os
+          import requests
+          
+          token = os.getenv('TELEGRAM_BOT_TOKEN')
+          chat_id = os.getenv('TELEGRAM_CHAT_ID')
+          
+          if token and chat_id:
+              url = f'https://api.telegram.org/bot{token}/sendMessage'
+              message = '❌ ERROR EN TRADING BOT\n\nEl workflow falló. Revisar logs.'
+              requests.post(url, json={'chat_id': chat_id, 'text': message})
+          "
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
