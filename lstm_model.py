@@ -10,6 +10,7 @@ from tensorflow.keras import layers
 from sklearn.preprocessing import StandardScaler
 import pickle
 import logging
+import requests
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
