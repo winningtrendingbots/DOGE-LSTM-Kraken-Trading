@@ -1,6 +1,6 @@
 """
 Script para entrenar modelo LSTM diariamente
-Usa YFINANCE para obtener datos históricos profundos
+Usa CoinGecko para obtener datos históricos profundos de criptomonedas
 Se ejecuta automáticamente cada madrugada via GitHub Actions
 """
 
@@ -11,7 +11,8 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 from pathlib import Path
-import yfinance as yf
+from pycoingecko import CoinGeckoAPI
+import time
 
 from telegram_notifier import TelegramNotifier
 from lstm_model import VolumeLSTM, create_and_train_model
@@ -29,34 +30,34 @@ logger = logging.getLogger(__name__)
 
 
 class LSTMTrainingConfig:
-    """Configuración para entrenamiento LSTM"""
+    """Configuración para entrenamiento LSTM con CoinGecko"""
     
     # Telegram (para notificaciones)
     TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
     TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
     
     # Símbolo de trading
-    # Para DOGE/USD en yfinance usamos 'DOGE-USD'
-    # Para XRP/USD sería 'XRP-USD'
-    # Para BTC/USD sería 'BTC-USD'
-    SYMBOL = 'DOGE-USD'
+    # Para CoinGecko, usamos el ID de la moneda, no el símbolo del ticker
+    # Dogecoin: 'dogecoin'
+    # Bitcoin: 'bitcoin'
+    # Ethereum: 'ethereum'
+    # Ripple: 'ripple'
+    COIN_ID = 'dogecoin'
+    COIN_SYMBOL = 'DOGE'  # Para display en notificaciones
     
-    # Marco temporal
-    # Opciones en yfinance: '1m', '5m', '15m', '30m', '1h', '1d'
-    # Nota: datos de minutos solo están disponibles para los últimos 7-60 días
-    # Para datos históricos más largos, usa '1h' o '1d'
-    INTERVAL = '1h'  # Usar 1 hora para tener 2 años de historia
+    # Moneda de cotización
+    VS_CURRENCY = 'usd'
+    
+    # Período histórico
+    # CoinGecko proporciona toda la historia disponible de la moneda
+    # Podemos especificar cuántos días queremos hacia atrás
+    HISTORICAL_DAYS = 730  # 2 años completos de datos diarios
     
     # Parámetros LSTM
     LSTM_HIDDEN_SIZE = 32       # Neuronas en capa LSTM
     LSTM_LOOKBACK = 10          # Períodos históricos para predicción
     LSTM_EPOCHS = 50            # Épocas de entrenamiento
     LSTM_DROPOUT = 0.2          # Dropout para regularización
-    
-    # Datos históricos
-    # Con INTERVAL='1h', podemos pedir 2 años completos
-    # Esto nos da aproximadamente 17,520 puntos de datos
-    HISTORICAL_PERIOD = '2y'    # 2 años ('1mo', '3mo', '6mo', '1y', '2y', '5y', 'max')
     
     # Rutas
     MODEL_DIR = 'models'
@@ -65,45 +66,89 @@ class LSTMTrainingConfig:
     METRICS_PATH = f'{MODEL_DIR}/training_metrics.txt'
 
 
-def download_historical_data(config):
+def download_historical_data_coingecko(config):
     """
-    Descargar datos históricos usando yfinance
+    Descargar datos históricos usando CoinGecko
     
-    Esta función es mucho más simple y poderosa que usar Kraken directamente
-    porque yfinance puede descargar años de datos en una sola llamada.
+    CoinGecko es superior a Yahoo Finance para criptomonedas porque:
+    1. Especializado en cripto, no en acciones tradicionales
+    2. Datos más limpios y consistentes
+    3. Cobertura completa de miles de altcoins
+    4. API gratuita sin autenticación requerida
+    5. Datos históricos profundos disponibles
     
     Args:
         config: Configuración del entrenamiento
         
     Returns:
-        DataFrame con columnas: Open, High, Low, Close, Volume
+        DataFrame con columnas: timestamp, price, volume
     """
     logger.info("="*80)
-    logger.info(f"DESCARGANDO DATOS HISTÓRICOS CON YFINANCE")
+    logger.info(f"DESCARGANDO DATOS HISTÓRICOS CON COINGECKO")
     logger.info("="*80)
     
     try:
-        # Descargar datos usando yfinance
-        # Esto es increíblemente simple comparado con hacer llamadas
-        # múltiples a la API de Kraken con paginación
-        logger.info(f"Símbolo: {config.SYMBOL}")
-        logger.info(f"Período: {config.HISTORICAL_PERIOD}")
-        logger.info(f"Intervalo: {config.INTERVAL}")
+        # Inicializar cliente de CoinGecko
+        # La API gratuita no requiere clave, pero tiene rate limits
+        cg = CoinGeckoAPI()
+        
+        logger.info(f"Coin ID: {config.COIN_ID}")
+        logger.info(f"Moneda: {config.VS_CURRENCY.upper()}")
+        logger.info(f"Período: {config.HISTORICAL_DAYS} días")
         logger.info("")
-        logger.info("Descargando desde Yahoo Finance...")
+        logger.info("Descargando desde CoinGecko API...")
         
-        ticker = yf.Ticker(config.SYMBOL)
+        # Calcular timestamp de inicio
+        # CoinGecko usa timestamps Unix (segundos desde 1970)
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=config.HISTORICAL_DAYS)
         
-        # Descargar datos históricos
-        # period: '1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', 'max'
-        # interval: '1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h', '1d', '5d', '1wk', '1mo'
-        df = ticker.history(
-            period=config.HISTORICAL_PERIOD,
-            interval=config.INTERVAL
+        from_timestamp = int(start_date.timestamp())
+        to_timestamp = int(end_date.timestamp())
+        
+        logger.info(f"Rango de fechas:")
+        logger.info(f"  Desde: {start_date.strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"  Hasta: {end_date.strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info("")
+        
+        # Descargar datos usando market_chart_range
+        # Este endpoint proporciona precios, volúmenes y market caps históricos
+        # Para períodos largos, CoinGecko agrupa automáticamente en intervalos diarios
+        logger.info("Realizando llamada a la API...")
+        data = cg.get_coin_market_chart_range_by_id(
+            id=config.COIN_ID,
+            vs_currency=config.VS_CURRENCY,
+            from_timestamp=from_timestamp,
+            to_timestamp=to_timestamp
         )
         
-        if df is None or len(df) == 0:
-            raise ValueError("No se pudieron descargar datos de yfinance")
+        # Pequeña pausa para respetar rate limits de la API
+        time.sleep(1)
+        
+        # Verificar que recibimos datos
+        if not data or 'prices' not in data or 'total_volumes' not in data:
+            raise ValueError("CoinGecko no retornó datos válidos")
+        
+        # Los datos vienen en formato:
+        # prices: [[timestamp_ms, price], ...]
+        # total_volumes: [[timestamp_ms, volume], ...]
+        
+        # Convertir a DataFrame
+        prices_df = pd.DataFrame(data['prices'], columns=['timestamp', 'price'])
+        volumes_df = pd.DataFrame(data['total_volumes'], columns=['timestamp', 'volume'])
+        
+        # Los timestamps pueden no coincidir exactamente, así que hacemos merge
+        df = pd.merge(prices_df, volumes_df, on='timestamp', how='inner')
+        
+        # Convertir timestamp de milisegundos a datetime
+        df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df = df.set_index('datetime')
+        
+        # Ordenar por fecha
+        df = df.sort_index()
+        
+        # Remover duplicados si los hay
+        df = df[~df.index.duplicated(keep='first')]
         
         # Información sobre los datos descargados
         logger.info("")
@@ -116,12 +161,20 @@ def download_historical_data(config):
         logger.info(f"Duración: {df.index[-1] - df.index[0]}")
         logger.info("")
         
+        # Información sobre el precio
+        logger.info("Estadísticas de Precio:")
+        logger.info(f"  Promedio: ${df['price'].mean():.6f}")
+        logger.info(f"  Máximo: ${df['price'].max():.6f}")
+        logger.info(f"  Mínimo: ${df['price'].min():.6f}")
+        logger.info(f"  Último: ${df['price'].iloc[-1]:.6f}")
+        logger.info("")
+        
         # Información sobre el volumen
         logger.info("Estadísticas de Volumen:")
-        logger.info(f"  Promedio: {df['Volume'].mean():,.0f}")
-        logger.info(f"  Máximo: {df['Volume'].max():,.0f}")
-        logger.info(f"  Mínimo: {df['Volume'].min():,.0f}")
-        logger.info(f"  Mediana: {df['Volume'].median():,.0f}")
+        logger.info(f"  Promedio: ${df['volume'].mean():,.0f}")
+        logger.info(f"  Máximo: ${df['volume'].max():,.0f}")
+        logger.info(f"  Mínimo: ${df['volume'].min():,.0f}")
+        logger.info(f"  Mediana: ${df['volume'].median():,.0f}")
         logger.info("="*80)
         logger.info("")
         
@@ -130,14 +183,15 @@ def download_historical_data(config):
         if len(df) < min_required:
             logger.warning(f"⚠️ Se recomienda al menos {min_required} períodos")
             logger.warning(f"   Solo se descargaron {len(df)} períodos")
-            logger.warning(f"   Considera usar un período más largo o intervalo más corto")
+            logger.warning(f"   Considera aumentar HISTORICAL_DAYS")
         
-        # Retornar solo las columnas que necesitamos
-        # yfinance ya proporciona las columnas en el formato correcto
-        return df[['Open', 'High', 'Low', 'Close', 'Volume']]
+        # Retornar DataFrame con las columnas necesarias
+        return df[['price', 'volume']]
         
     except Exception as e:
-        logger.error(f"Error descargando datos de yfinance: {e}")
+        logger.error(f"Error descargando datos de CoinGecko: {e}")
+        logger.error(f"Asegúrate de que el COIN_ID '{config.COIN_ID}' es válido")
+        logger.error("Ejemplos válidos: 'bitcoin', 'ethereum', 'dogecoin', 'ripple'")
         raise
 
 
@@ -145,8 +199,11 @@ def prepare_volume_data(df):
     """
     Preparar datos de volumen para entrenamiento LSTM
     
+    CoinGecko proporciona volúmenes en USD, lo cual es perfecto para nuestro análisis.
+    Los volúmenes representan el valor total negociado en dólares durante cada período.
+    
     Args:
-        df: DataFrame con datos OHLCV
+        df: DataFrame con columnas price y volume
         
     Returns:
         Array de numpy con volúmenes
@@ -154,22 +211,29 @@ def prepare_volume_data(df):
     logger.info("Preparando datos de volumen para LSTM...")
     
     # Extraer volumen
-    volumes = df['Volume'].values
+    volumes = df['volume'].values
     
     # Verificar que no haya valores NaN
     if np.isnan(volumes).any():
         logger.warning("Encontrados valores NaN en volumen, limpiando...")
         volumes = pd.Series(volumes).fillna(method='ffill').fillna(0).values
     
-    # Verificar que no haya volúmenes cero (pueden causar problemas)
+    # Verificar que no haya volúmenes cero
     zero_count = (volumes == 0).sum()
     if zero_count > 0:
         logger.warning(f"Encontrados {zero_count} volúmenes en cero")
         # Reemplazar ceros con el mínimo no-cero
         min_nonzero = volumes[volumes > 0].min() if (volumes > 0).any() else 1.0
         volumes[volumes == 0] = min_nonzero
+        logger.info(f"Ceros reemplazados con valor mínimo: {min_nonzero:,.0f}")
+    
+    # Verificar que los volúmenes son razonables
+    # Para criptomonedas, volúmenes demasiado bajos pueden indicar datos defectuosos
+    if volumes.mean() < 100:
+        logger.warning("⚠️ Volúmenes promedio muy bajos, verifica los datos")
     
     logger.info(f"Datos de volumen preparados: {len(volumes)} puntos")
+    logger.info(f"Rango de volúmenes: ${volumes.min():,.0f} - ${volumes.max():,.0f}")
     
     return volumes
 
@@ -177,6 +241,10 @@ def prepare_volume_data(df):
 def train_model(volumes, config):
     """
     Entrenar modelo LSTM con datos históricos
+    
+    El modelo aprenderá a predecir volúmenes futuros basándose en patrones
+    históricos. Esto es útil para detectar aceleraciones de volumen antes
+    de que ocurran movimientos significativos de precio.
     
     Args:
         volumes: Array de volúmenes históricos
@@ -199,13 +267,6 @@ def train_model(volumes, config):
     Path(config.MODEL_DIR).mkdir(exist_ok=True)
     
     # Crear y entrenar modelo
-    # La función create_and_train_model maneja todo el pipeline:
-    # - Crear arquitectura LSTM
-    # - Preparar secuencias de entrenamiento
-    # - Normalizar datos
-    # - Entrenar con early stopping
-    # - Evaluar performance
-    # - Guardar modelo y scaler
     model, metrics = create_and_train_model(
         volumes=volumes,
         hidden_size=config.LSTM_HIDDEN_SIZE,
@@ -218,8 +279,8 @@ def train_model(volumes, config):
     logger.info("ENTRENAMIENTO COMPLETADO")
     logger.info("="*80)
     logger.info("Métricas de Performance:")
-    logger.info(f"  MAE (Mean Absolute Error): {metrics['mae']:,.2f}")
-    logger.info(f"  RMSE (Root Mean Square Error): {metrics['rmse']:,.2f}")
+    logger.info(f"  MAE (Mean Absolute Error): ${metrics['mae']:,.2f}")
+    logger.info(f"  RMSE (Root Mean Square Error): ${metrics['rmse']:,.2f}")
     logger.info(f"  MAPE (Mean Absolute % Error): {metrics['mape']:.2f}%")
     logger.info("")
     logger.info("Interpretación de MAPE:")
@@ -240,8 +301,9 @@ def validate_model(model, volumes, config):
     """
     Validar modelo con predicciones de ejemplo
     
-    Esta función hace una predicción real con los últimos datos
-    para verificar que el modelo está funcionando correctamente.
+    Hace una predicción real con los últimos datos disponibles para
+    verificar que el modelo está funcionando correctamente y proporcionar
+    una muestra de cómo se comportará en producción.
     
     Args:
         model: Modelo entrenado
@@ -260,22 +322,19 @@ def validate_model(model, volumes, config):
     
     logger.info(f"Usando últimos {config.LSTM_LOOKBACK} períodos para predicción:")
     for i, vol in enumerate(recent_volumes, 1):
-        logger.info(f"  Período {i}: {vol:,.0f}")
+        logger.info(f"  Período {i}: ${vol:,.0f}")
     
     logger.info("")
     logger.info("Generando predicción...")
     
-    # Hacer predicción de volumen
-    predicted_volume = model.predict_next_volume(recent_volumes)
-    
-    # Calcular derivadas predichas
+    # Hacer predicción completa con derivadas
     derivatives = model.predict_derivatives(volumes[-config.LSTM_LOOKBACK:])
     
     logger.info("")
     logger.info("RESULTADOS DE LA PREDICCIÓN:")
     logger.info("="*80)
-    logger.info(f"📊 Volumen actual: {derivatives['current_volume']:,.0f}")
-    logger.info(f"🔮 Volumen predicho: {derivatives['predicted_volume']:,.0f}")
+    logger.info(f"📊 Volumen actual: ${derivatives['current_volume']:,.0f}")
+    logger.info(f"🔮 Volumen predicho: ${derivatives['predicted_volume']:,.0f}")
     logger.info("")
     
     # Calcular cambio porcentual
@@ -285,25 +344,28 @@ def validate_model(model, volumes, config):
     logger.info("")
     
     logger.info("Primera Derivada (velocidad de cambio):")
-    logger.info(f"  Actual: {derivatives['current_first_derivative']:,.0f}")
-    logger.info(f"  Predicha: {derivatives['predicted_first_derivative']:,.0f}")
+    logger.info(f"  Actual: ${derivatives['current_first_derivative']:,.0f}")
+    logger.info(f"  Predicha: ${derivatives['predicted_first_derivative']:,.0f}")
     logger.info("")
     
     logger.info("Segunda Derivada (aceleración):")
-    logger.info(f"  Actual: {derivatives['current_second_derivative']:,.0f}")
-    logger.info(f"  Predicha: {derivatives['predicted_second_derivative']:,.0f}")
+    logger.info(f"  Actual: ${derivatives['current_second_derivative']:,.0f}")
+    logger.info(f"  Predicha: ${derivatives['predicted_second_derivative']:,.0f}")
     logger.info("")
     
     logger.info("Señales de Trading:")
     if derivatives['is_accelerating_positive']:
         logger.info("  🟢 ACELERACIÓN POSITIVA - Señal alcista")
         logger.info("     El volumen está aumentando y acelerando al alza")
+        logger.info("     Esto típicamente precede movimientos de precio significativos")
     elif derivatives['is_accelerating_negative']:
         logger.info("  🔴 ACELERACIÓN NEGATIVA - Señal bajista")
         logger.info("     El volumen está disminuyendo y acelerando a la baja")
+        logger.info("     Puede indicar pérdida de interés o consolidación")
     else:
         logger.info("  ⚪ SIN ACELERACIÓN CLARA - Sin señal fuerte")
         logger.info("     El volumen no muestra patrón de aceleración definido")
+        logger.info("     Esperar confirmación antes de operar")
     
     logger.info("="*80 + "\n")
     
@@ -316,12 +378,12 @@ def save_metrics(metrics, derivatives, config):
     
     with open(config.METRICS_PATH, 'w') as f:
         f.write("="*80 + "\n")
-        f.write("LSTM TRAINING METRICS\n")
+        f.write("LSTM TRAINING METRICS (CoinGecko Data)\n")
         f.write("="*80 + "\n")
         f.write(f"Timestamp: {timestamp}\n")
-        f.write(f"Symbol: {config.SYMBOL}\n")
-        f.write(f"Interval: {config.INTERVAL}\n")
-        f.write(f"Historical Period: {config.HISTORICAL_PERIOD}\n")
+        f.write(f"Coin: {config.COIN_SYMBOL} ({config.COIN_ID})\n")
+        f.write(f"VS Currency: {config.VS_CURRENCY.upper()}\n")
+        f.write(f"Historical Days: {config.HISTORICAL_DAYS}\n")
         f.write("\n")
         
         f.write("Model Configuration:\n")
@@ -332,16 +394,18 @@ def save_metrics(metrics, derivatives, config):
         f.write("\n")
         
         f.write("Training Metrics:\n")
-        f.write(f"  MAE: {metrics['mae']:,.2f}\n")
-        f.write(f"  RMSE: {metrics['rmse']:,.2f}\n")
+        f.write(f"  MAE: ${metrics['mae']:,.2f}\n")
+        f.write(f"  RMSE: ${metrics['rmse']:,.2f}\n")
         f.write(f"  MAPE: {metrics['mape']:.2f}%\n")
         f.write(f"  Loss: {metrics['loss']:.4f}\n")
         f.write("\n")
         
         f.write("Validation Example:\n")
-        f.write(f"  Current Volume: {derivatives['current_volume']:,.0f}\n")
-        f.write(f"  Predicted Volume: {derivatives['predicted_volume']:,.0f}\n")
-        f.write(f"  Change: {((derivatives['predicted_volume'] - derivatives['current_volume']) / derivatives['current_volume'] * 100):+.2f}%\n")
+        f.write(f"  Current Volume: ${derivatives['current_volume']:,.0f}\n")
+        f.write(f"  Predicted Volume: ${derivatives['predicted_volume']:,.0f}\n")
+        pct_change = ((derivatives['predicted_volume'] - derivatives['current_volume']) 
+                      / derivatives['current_volume'] * 100)
+        f.write(f"  Change: {pct_change:+.2f}%\n")
         f.write(f"  Accelerating Positive: {derivatives['is_accelerating_positive']}\n")
         f.write(f"  Accelerating Negative: {derivatives['is_accelerating_negative']}\n")
         f.write("\n")
@@ -372,20 +436,21 @@ def notify_training_complete(telegram, metrics, derivatives, config, training_ti
 🧠 <b>LSTM MODEL TRAINING COMPLETED</b>
 
 📅 <b>Training Date:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
-💱 <b>Symbol:</b> {config.SYMBOL}
-⏱️ <b>Interval:</b> {config.INTERVAL}
-📊 <b>Historical Data:</b> {config.HISTORICAL_PERIOD}
+💎 <b>Coin:</b> {config.COIN_SYMBOL} ({config.COIN_ID})
+💱 <b>Currency:</b> {config.VS_CURRENCY.upper()}
+📊 <b>Historical Data:</b> {config.HISTORICAL_DAYS} days
 ⏳ <b>Training Time:</b> {training_time}
+🔧 <b>Data Source:</b> CoinGecko API
 
 📈 <b>Model Performance:</b>
-• MAE: {metrics['mae']:,.2f}
-• RMSE: {metrics['rmse']:,.2f}
+• MAE: ${metrics['mae']:,.2f}
+• RMSE: ${metrics['rmse']:,.2f}
 • MAPE: {metrics['mape']:.2f}%
 • Quality: {quality}
 
 🧪 <b>Validation Test:</b>
-• Current Vol: {derivatives['current_volume']:,.0f}
-• Predicted Vol: {derivatives['predicted_volume']:,.0f}
+• Current Vol: ${derivatives['current_volume']:,.0f}
+• Predicted Vol: ${derivatives['predicted_volume']:,.0f}
 • Expected Change: {pct_change:+.2f}%
 • Accelerating ⬆️: {'✅' if derivatives['is_accelerating_positive'] else '❌'}
 • Accelerating ⬇️: {'✅' if derivatives['is_accelerating_negative'] else '❌'}
@@ -404,7 +469,7 @@ def main():
     try:
         logger.info("\n" + "🧠 "*40)
         logger.info("LSTM DAILY TRAINING - STARTING")
-        logger.info("Using yfinance for deep historical data")
+        logger.info("Using CoinGecko for deep cryptocurrency data")
         logger.info("🧠 "*40 + "\n")
         
         # Cargar configuración
@@ -427,14 +492,14 @@ def main():
         # Notificar inicio
         telegram.send_message(
             f"🧠 <b>LSTM Training Started</b>\n\n"
-            f"📊 Symbol: {config.SYMBOL}\n"
-            f"⏱️ Interval: {config.INTERVAL}\n"
-            f"📅 Period: {config.HISTORICAL_PERIOD}\n\n"
-            f"Downloading data from Yahoo Finance..."
+            f"💎 Coin: {config.COIN_SYMBOL}\n"
+            f"📅 Period: {config.HISTORICAL_DAYS} days\n"
+            f"🔧 Source: CoinGecko API\n\n"
+            f"Downloading historical data..."
         )
         
-        # Descargar datos históricos usando yfinance
-        df = download_historical_data(config)
+        # Descargar datos históricos usando CoinGecko
+        df = download_historical_data_coingecko(config)
         
         # Preparar datos de volumen
         volumes = prepare_volume_data(df)
