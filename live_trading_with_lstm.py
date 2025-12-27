@@ -47,7 +47,7 @@ class ProductionConfig:
     
     # Trading
     SYMBOL = 'DOGE-USD'
-    KRAKEN_PAIR = 'XDOGEZUSD'
+    KRAKEN_PAIR = 'XDOGZUSD'
     INTERVAL = 60
     LOOKBACK_PERIODS = 200
     
