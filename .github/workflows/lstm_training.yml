@@ -2,7 +2,7 @@ name: LSTM Daily Training
 
 on:
   schedule:
-    # Ejecutar diariamente a las 04:00 UTC (madrugada)
+    # Ejecutar diariamente a las 04:00 UTC
     - cron: '0 4 * * *'
   
   # Permitir ejecución manual
@@ -21,6 +21,9 @@ jobs:
           echo "=== Archivos en raíz ==="
           ls -la
           echo ""
+          echo "=== Buscando archivos Python ==="
+          find . -name "*.py" -type f
+          echo ""
           echo "=== Buscando requirements ==="
           find . -name "requirements*.txt" -type f
       
@@ -33,7 +36,6 @@ jobs:
         run: |
           pip install --upgrade pip
           
-          # Intentar con requirements_lstm.txt primero
           if [ -f "requirements_lstm.txt" ]; then
             echo "Instalando desde requirements_lstm.txt"
             pip install -r requirements_lstm.txt
@@ -42,19 +44,18 @@ jobs:
             pip install -r requirements.txt
           else
             echo "No se encontró archivo de requirements, instalando manualmente"
-            pip install krakenex pykrakenapi pandas numpy ta requests tensorflow scikit-learn python-dateutil
+            pip install krakenex pykrakenapi pandas numpy ta requests yfinance tensorflow scikit-learn python-dateutil
           fi
           
-          # Verificar instalación
-          echo "=== Paquetes instalados ==="
-          pip list | grep -E "krakenex|pandas|tensorflow|requests"
+          echo "=== Verificando paquetes instalados ==="
+          pip list | grep -E "krakenex|pandas|tensorflow|requests|yfinance"
       
       - name: Crear directorio models
         run: |
           mkdir -p models
           echo "Directorio models creado"
       
-      - name: Restaurar modelo anterior (si existe)
+      - name: Restaurar modelo anterior
         uses: actions/cache/restore@v4
         continue-on-error: true
         with:
@@ -66,8 +67,6 @@ jobs:
       
       - name: Entrenar modelo LSTM
         env:
-          KRAKEN_API_KEY: ${{ secrets.KRAKEN_API_KEY }}
-          KRAKEN_API_SECRET: ${{ secrets.KRAKEN_API_SECRET }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
@@ -123,41 +122,8 @@ jobs:
                   print(f'Notification sent: {response.status_code}')
           except Exception as e:
               print(f'Could not send notification: {e}')
-              sys.exit(0)  # No fallar el workflow por esto
+              sys.exit(0)
           "
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-            ```
-            
-            Esta versión mejorada hace lo siguiente:
-            
-            - **Verifica la estructura de archivos** antes de intentar instalar dependencias
-            - **Tiene un fallback** que instala las dependencias manualmente si no encuentra el archivo requirements
-            - **Crea el directorio models** explícitamente antes de usarlo
-            - **Continúa aunque falle** la restauración del cache (porque en la primera ejecución no existe)
-            - **Muestra información de debug** útil en los logs
-            
-            ## Cómo Aplicar los Cambios
-            
-            Una vez que hayas verificado la estructura y actualizado el archivo del workflow:
-            
-            **1.** Haz commit de todos los cambios a tu repositorio
-            
-            **2.** Ve a GitHub → Actions → LSTM Daily Training
-            
-            **3.** Click en "Run workflow" → "Run workflow"
-            
-            **4.** Esta vez deberías ver en los logs información útil como:
-            ```
-=== Archivos en raíz ===
-[listado de archivos]
-
-=== Buscando requirements ===
-./requirements_lstm.txt
-
-=== Paquetes instalados ===
-krakenex
-pandas
-tensorflow
-requests
