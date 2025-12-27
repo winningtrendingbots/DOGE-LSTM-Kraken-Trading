@@ -36,7 +36,7 @@ class KrakenTrader:
         
         logger.info("KrakenTrader inicializado")
     
-    def get_ohlc_data(self, pair='XXRPZUSD', interval=15, since=None):
+    def get_ohlc_data(self, pair='DOGEUSD', interval=15, since=None):
         """
         Obtener datos OHLC de Kraken
         
